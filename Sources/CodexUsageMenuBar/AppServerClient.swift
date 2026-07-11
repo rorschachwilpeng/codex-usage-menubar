@@ -128,16 +128,17 @@ actor AppServerClient: RateLimitsReading {
 
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
-            Task { await self?.consumeOutput(data) }
+            guard !data.isEmpty, let client = self else { return }
+            Task { await client.consumeOutput(data) }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
-            Task { await self?.appendDiagnostic(data) }
+            guard !data.isEmpty, let client = self else { return }
+            Task { await client.appendDiagnostic(data) }
         }
         process.terminationHandler = { [weak self] _ in
-            Task { await self?.processDidStop() }
+            guard let client = self else { return }
+            Task { await client.processDidStop() }
         }
 
         try process.run()
