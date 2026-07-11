@@ -92,16 +92,18 @@ final class MenuBarController: NSObject, ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.store?.markSleeping() }
+            guard let controller = self else { return }
+            Task { @MainActor in controller.store?.markSleeping() }
         })
         powerObservers.append(center.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            guard let controller = self else { return }
             Task { @MainActor in
-                self?.store?.markAwake()
-                self?.refreshNow()
+                controller.store?.markAwake()
+                controller.refreshNow()
             }
         })
     }
@@ -112,7 +114,8 @@ final class MenuBarController: NSObject, ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.configureOverlay() }
+            guard let controller = self else { return }
+            Task { @MainActor in controller.configureOverlay() }
         }
     }
 
