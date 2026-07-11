@@ -2,7 +2,13 @@
 
 A lightweight native macOS menu bar app that shows your remaining Codex usage and reset times without opening the Codex window.
 
-![Codex Usage Menu Bar preview](docs/preview.svg)
+![Codex Usage Menu Bar in the macOS menu bar](docs/usage-menubar-context.png)
+
+*Always visible beside the notch while you work.*
+
+<img src="docs/usage-menubar-closeup.png" alt="Close-up of Codex remaining usage and reset times" width="406">
+
+*Remaining short-window usage and reset time on the left; weekly usage and reset date on the right.*
 
 ```text
 ⏰17% 14:32 ║ 📅87% 7/18
