@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: ./scripts/test.sh
+      - name: Build Universal app
+        run: CODEX_BUILD_UNIVERSAL=1 ./scripts/build-app.sh
+      - name: Package app
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ditto -c -k --sequesterRsrc --keepParent "build/Codex Usage.app" "Codex-Usage-${VERSION}.app.zip"
+          shasum -a 256 "Codex-Usage-${VERSION}.app.zip" > "Codex-Usage-${VERSION}.app.zip.sha256"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "Codex-Usage-${GITHUB_REF_NAME}.app.zip" \
+            "Codex-Usage-${GITHUB_REF_NAME}.app.zip.sha256" \
+            --generate-notes \
+            --title "Codex Usage ${GITHUB_REF_NAME}"

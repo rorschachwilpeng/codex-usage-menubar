@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: ./scripts/test.sh
+      - name: Build Universal app
+        run: CODEX_BUILD_UNIVERSAL=1 ./scripts/build-app.sh
+      - name: Verify architectures
+        run: lipo -archs "build/Codex Usage.app/Contents/MacOS/CodexUsageMenuBar" | grep -q 'x86_64 arm64\|arm64 x86_64'
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Usage-universal
+          path: build/Codex Usage.app
