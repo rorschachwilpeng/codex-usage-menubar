@@ -9,9 +9,7 @@ LEGACY_LABEL="com.pkfare.codex-usage-menubar"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 
-if [[ ! -d "$SOURCE_APP" ]]; then
-  "$ROOT/scripts/build-app.sh"
-fi
+"$ROOT/scripts/build-app.sh"
 "$ROOT/scripts/verify-app.sh" "$SOURCE_APP"
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
 launchctl bootout "$DOMAIN/$LEGACY_LABEL" 2>/dev/null || true

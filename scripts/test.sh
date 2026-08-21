@@ -7,6 +7,7 @@ mkdir -p .build/tests
 
 swiftc \
   Sources/CodexUsageMenuBar/UsageModels.swift \
+  Sources/CodexUsageMenuBar/WeeklyUsage.swift \
   Sources/CodexUsageMenuBar/AppServerClient.swift \
   Sources/CodexUsageMenuBar/UsageStore.swift \
   Tests/TestRunner.swift \

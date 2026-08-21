@@ -32,44 +32,64 @@ struct TestRunner {
     }
 
     private static func testUsageModels() throws {
-        let json = #"{"rateLimits":{"primary":{"usedPercent":9,"windowDurationMins":300,"resetsAt":1783751549},"secondary":{"usedPercent":1,"windowDurationMins":10080,"resetsAt":1784338349}}}"#.data(using: .utf8)!
+        let json = #"{"rateLimits":{"primary":{"usedPercent":8,"windowDurationMins":10080,"resetsAt":1784338349}}}"#.data(using: .utf8)!
         let response = try JSONDecoder().decode(RateLimitsResponse.self, from: json)
         let snapshot = UsageSnapshot(response: response, updatedAt: Date(timeIntervalSince1970: 1))
-        try expect(snapshot.primaryRemaining == 91, "primary remaining should be 91")
-        try expect(snapshot.secondaryRemaining == 99, "secondary remaining should be 99")
-        try expect(snapshot.menuBarTitle == "5h: 91% | week: 99%", "menu title should match")
-        let presentation = UsagePillPresentation(
+        try expect(snapshot.weeklyRemaining == 92, "single primary window should be treated as the weekly limit")
+        try expect(snapshot.weeklyWindowDurationMins == 10_080, "weekly duration should be retained")
+        let presentation = WeeklyPillPresentation(
             snapshot: snapshot,
-            now: Date(timeIntervalSince1970: 1_783_751_000),
             timeZone: TimeZone(identifier: "Asia/Shanghai")!
         )
-        try expect(presentation.primaryPercent == "91%", "primary percentage should be formatted")
-        try expect(presentation.secondaryPercent == "99%", "secondary percentage should be formatted")
-        try expect(presentation.primaryReset == "14:32", "primary reset should use HH:mm")
-        try expect(presentation.secondaryReset == "7/18", "weekly reset should use M/d")
-        try expect(presentation.primaryIsUrgent, "primary reset within one hour should be urgent")
-        try expect(!presentation.secondaryIsUrgent, "weekly reset outside one hour should not be urgent")
+        try expect(presentation.remaining == "92%", "weekly percentage should be formatted")
+        try expect(presentation.resetDate == "7/18", "menu bar reset should only use month and day")
+        try expect(presentation.menuBarText == "💰 92% ｜ 📅 7/18", "menu bar copy should use the compact weekly layout")
 
         let boundary = UsageSnapshot(response: RateLimitsResponse(rateLimits: RateLimitSnapshot(
-            primary: RateLimitWindow(usedPercent: -5, windowDurationMins: nil, resetsAt: nil),
-            secondary: RateLimitWindow(usedPercent: 110, windowDurationMins: nil, resetsAt: nil)
-        )), updatedAt: .distantPast)
-        try expect(boundary.primaryRemaining == 100, "remaining should clamp to 100")
-        try expect(boundary.secondaryRemaining == 0, "remaining should clamp to 0")
-
-        let partial = UsageSnapshot(response: RateLimitsResponse(rateLimits: RateLimitSnapshot(
-            primary: RateLimitWindow(usedPercent: 9, windowDurationMins: nil, resetsAt: nil),
+            primary: RateLimitWindow(usedPercent: 110, windowDurationMins: nil, resetsAt: nil),
             secondary: nil
         )), updatedAt: .distantPast)
-        try expect(partial.menuBarTitle == "5h: 91% | week: --%", "missing window should use placeholder")
-        let partialPresentation = UsagePillPresentation(
+        try expect(boundary.weeklyRemaining == 0, "remaining should clamp to 0")
+
+        let partial = UsageSnapshot(response: RateLimitsResponse(rateLimits: RateLimitSnapshot(
+            primary: nil,
+            secondary: nil
+        )), updatedAt: .distantPast)
+        let partialPresentation = WeeklyPillPresentation(
             snapshot: partial,
-            now: .distantPast,
             timeZone: TimeZone(identifier: "Asia/Shanghai")!
         )
-        try expect(partialPresentation.primaryReset == "--:--", "missing primary reset should use placeholder")
-        try expect(partialPresentation.secondaryPercent == "--%", "missing weekly percentage should use placeholder")
-        try expect(partialPresentation.secondaryReset == "--/--", "missing weekly reset should use placeholder")
+        try expect(partialPresentation.remaining == "--%", "missing weekly percentage should use placeholder")
+        try expect(partialPresentation.resetDate == "--/--", "missing weekly reset should use placeholder")
+
+        let forecastNow = Date(timeIntervalSince1970: 1_800_000_000)
+        let forecastReset = forecastNow.addingTimeInterval(2 * 86_400)
+        let fastSnapshot = UsageSnapshot(response: RateLimitsResponse(rateLimits: RateLimitSnapshot(
+            primary: RateLimitWindow(usedPercent: 80, windowDurationMins: 10_080, resetsAt: Int64(forecastReset.timeIntervalSince1970)),
+            secondary: nil
+        )), updatedAt: forecastNow)
+        let fastForecast = WeeklyUsageForecast(snapshot: fastSnapshot, now: forecastNow)
+        try expect(fastForecast.pace == .fast, "forecast should flag usage that runs out before reset")
+        try expect(fastForecast.exhaustionDate != nil, "fast forecast should include an exhaustion date")
+
+        let slowSnapshot = UsageSnapshot(response: RateLimitsResponse(rateLimits: RateLimitSnapshot(
+            primary: RateLimitWindow(usedPercent: 60, windowDurationMins: 10_080, resetsAt: Int64(forecastReset.timeIntervalSince1970)),
+            secondary: nil
+        )), updatedAt: forecastNow)
+        let slowForecast = WeeklyUsageForecast(snapshot: slowSnapshot, now: forecastNow)
+        try expect(slowForecast.pace == .slow, "forecast should flag a material remaining balance at reset")
+        try expect(slowForecast.projectedRemainingAtReset == 16, "forecast should project the remaining weekly balance")
+
+        var history = WeeklyUsageHistory()
+        let dayOne = Date(timeIntervalSince1970: 1_800_000_000)
+        let dayTwo = dayOne.addingTimeInterval(86_400)
+        history.record(remaining: 94, resetAt: forecastReset, observedAt: dayOne)
+        history.record(remaining: 88, resetAt: forecastReset, observedAt: dayOne.addingTimeInterval(3_600))
+        history.record(remaining: 86, resetAt: forecastReset, observedAt: dayTwo.addingTimeInterval(3_600))
+        let dailyUsage = history.dailyUsage(resetAt: forecastReset, timeZone: TimeZone(secondsFromGMT: 0)!)
+        try expect(dailyUsage.count == 2, "history should create one bucket per observed calendar day")
+        try expect(dailyUsage[0].usedPercent == 6, "history should total same-day usage deltas")
+        try expect(dailyUsage[1].usedPercent == 2, "history should put later usage in the next day")
     }
 
     private static func testRouter() throws {
@@ -89,19 +109,34 @@ struct TestRunner {
 
     @MainActor
     private static func testUsageStore() async throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodexUsageMenuBarTests-\(UUID().uuidString)")
+        let historyURL = temporaryDirectory.appendingPathComponent("weekly-usage-history.json")
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let reset = Date(timeIntervalSince1970: 1_800_604_800)
         let response = RateLimitsResponse(rateLimits: RateLimitSnapshot(
-            primary: RateLimitWindow(usedPercent: 9, windowDurationMins: 300, resetsAt: nil),
-            secondary: RateLimitWindow(usedPercent: 1, windowDurationMins: 10_080, resetsAt: nil)
+            primary: RateLimitWindow(
+                usedPercent: 9,
+                windowDurationMins: 10_080,
+                resetsAt: Int64(reset.timeIntervalSince1970)
+            ),
+            secondary: nil
         ))
         let reader = ScriptedReader(results: [.success(response), .failure(TestFailure.assertion("offline"))])
-        let store = UsageStore(reader: reader, now: { Date(timeIntervalSince1970: 1) })
+        let store = UsageStore(
+            reader: reader,
+            now: { Date(timeIntervalSince1970: 1_800_000_000) },
+            historyURL: historyURL
+        )
 
         await store.refresh()
-        try expect(store.title == "5h: 91% | week: 99%", "store should expose live title")
+        try expect(store.title == "💰 91% ｜ 📅 1/22", "store should expose the compact weekly title")
         try expect(store.nextRefreshDelay == 30, "success should use 30-second refresh")
+        try expect(FileManager.default.fileExists(atPath: historyURL.path), "store should persist the first weekly sample")
 
         await store.refresh()
-        try expect(store.title == "5h: 91% | week: 99%", "failure should retain last good title")
+        try expect(store.title == "💰 91% ｜ 📅 1/22", "failure should retain last good title")
         try expect(store.isStale, "failure should mark data stale")
         try expect(store.nextRefreshDelay == 30, "first failure should retry after 30 seconds")
 

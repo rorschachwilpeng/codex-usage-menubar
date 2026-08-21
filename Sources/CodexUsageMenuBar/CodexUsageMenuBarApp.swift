@@ -20,7 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class MenuBarController: NSObject, ObservableObject {
     @Published private(set) var title = "Usage --"
-    @Published private(set) var primaryReset = "--"
     @Published private(set) var weeklyReset = "--"
     @Published private(set) var statusText = "Loading…"
 
@@ -30,11 +29,13 @@ final class MenuBarController: NSObject, ObservableObject {
     private var powerObservers: [NSObjectProtocol] = []
     private var screenObserver: NSObjectProtocol?
     private var statusItem: NSStatusItem!
-    private var primaryResetItem: NSMenuItem!
     private var weeklyResetItem: NSMenuItem!
     private var updateItem: NSMenuItem!
     private var overlayPanels: [NSPanel] = []
-    private var overlayViews: [StatusPillView] = []
+    private var overlayViews: [WeeklyStatusPillView] = []
+    private var forecastPanels: [NSPanel] = []
+    private var forecastViews: [ForecastPopoverView] = []
+    private var closePopoverTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -45,7 +46,8 @@ final class MenuBarController: NSObject, ObservableObject {
             let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             store = UsageStore(
                 reader: client,
-                cacheURL: support.appendingPathComponent("CodexUsageMenuBar/last-usage.json")
+                cacheURL: support.appendingPathComponent("CodexUsageMenuBar/last-usage.json"),
+                historyURL: support.appendingPathComponent("CodexUsageMenuBar/weekly-usage-history.json")
             )
             updatePresentation()
             observePowerEvents()
@@ -122,8 +124,7 @@ final class MenuBarController: NSObject, ObservableObject {
     private func updatePresentation() {
         guard let store else { return }
         title = store.title
-        primaryReset = formatDate(store.snapshot?.primaryResetsAt)
-        weeklyReset = formatDate(store.snapshot?.secondaryResetsAt)
+        weeklyReset = formatDate(store.snapshot?.weeklyResetsAt)
         switch store.status {
         case .loading:
             statusText = "Loading…"
@@ -134,28 +135,27 @@ final class MenuBarController: NSObject, ObservableObject {
         case .loginRequired:
             statusText = "Sign in to Codex first"
         }
-        let pillPresentation = UsagePillPresentation(snapshot: store.snapshot)
-        setStatusTitle(
-            "⏰\(pillPresentation.primaryPercent) \(pillPresentation.primaryReset) │ " +
-            "📅\(pillPresentation.secondaryPercent) \(pillPresentation.secondaryReset)"
-        )
-        overlayViews.forEach { $0.presentation = pillPresentation }
-        primaryResetItem.title = "Short window resets: \(primaryReset)"
+        let pillPresentation = WeeklyPillPresentation(snapshot: store.snapshot)
+        let forecast = WeeklyUsageForecast(snapshot: store.snapshot)
+        setStatusTitle(pillPresentation.menuBarText)
+        overlayViews.forEach {
+            $0.presentation = pillPresentation
+            $0.showsRisk = forecast.pace == .fast
+        }
+        forecastViews.forEach { $0.update(snapshot: store.snapshot, history: store.history, now: Date()) }
         weeklyResetItem.title = "Weekly limit resets: \(weeklyReset)"
         updateItem.title = statusText
     }
 
     private func configureMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: 170)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.isVisible = true
         statusItem.button?.title = ""
         configureOverlay()
 
         let menu = NSMenu()
-        primaryResetItem = infoItem("Short window resets: --")
         weeklyResetItem = infoItem("Weekly limit resets: --")
         updateItem = infoItem("Loading…")
-        menu.addItem(primaryResetItem)
         menu.addItem(weeklyResetItem)
         menu.addItem(updateItem)
         menu.addItem(.separator())
@@ -191,10 +191,13 @@ final class MenuBarController: NSObject, ObservableObject {
 
     private func configureOverlay() {
         overlayPanels.forEach { $0.close() }
+        forecastPanels.forEach { $0.close() }
         overlayPanels.removeAll()
         overlayViews.removeAll()
+        forecastPanels.removeAll()
+        forecastViews.removeAll()
 
-        let size = NSSize(width: 170, height: 24)
+        let size = NSSize(width: 154, height: 24)
         for screen in NSScreen.screens {
             guard let leftArea = screen.auxiliaryTopLeftArea else { continue }
             let origin: NSPoint
@@ -214,15 +217,65 @@ final class MenuBarController: NSObject, ObservableObject {
             panel.hasShadow = false
             panel.hidesOnDeactivate = false
             panel.isReleasedWhenClosed = false
-            panel.ignoresMouseEvents = true
+            panel.ignoresMouseEvents = false
             panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-            let view = StatusPillView(frame: NSRect(origin: .zero, size: size))
+            let view = WeeklyStatusPillView(frame: NSRect(origin: .zero, size: size))
             panel.contentView = view
+
+            let forecastPanel = NSPanel(
+                contentRect: NSRect(origin: .zero, size: NSSize(width: 360, height: 286)),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            forecastPanel.level = .screenSaver
+            forecastPanel.isOpaque = false
+            forecastPanel.backgroundColor = .clear
+            forecastPanel.hasShadow = false
+            forecastPanel.hidesOnDeactivate = false
+            forecastPanel.isReleasedWhenClosed = false
+            forecastPanel.ignoresMouseEvents = false
+            forecastPanel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+            let forecastView = ForecastPopoverView(frame: NSRect(origin: .zero, size: forecastPanel.frame.size))
+            forecastPanel.contentView = forecastView
+
+            view.onHoverChanged = { [weak self, weak panel, weak forecastPanel] hovering in
+                self?.setForecastVisibility(hovering, anchor: panel, panel: forecastPanel)
+            }
+            forecastView.onHoverChanged = { [weak self, weak panel, weak forecastPanel] hovering in
+                self?.setForecastVisibility(hovering, anchor: panel, panel: forecastPanel)
+            }
             panel.orderFrontRegardless()
             overlayPanels.append(panel)
             overlayViews.append(view)
+            forecastPanels.append(forecastPanel)
+            forecastViews.append(forecastView)
         }
         statusItem.isVisible = overlayPanels.isEmpty
+    }
+
+    private func setForecastVisibility(_ visible: Bool, anchor: NSPanel?, panel: NSPanel?) {
+        closePopoverTask?.cancel()
+        guard let anchor, let panel else { return }
+        if visible {
+            positionForecastPanel(panel, below: anchor)
+            panel.orderFrontRegardless()
+            return
+        }
+        closePopoverTask = Task { [weak panel] in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run { panel?.orderOut(nil) }
+        }
+    }
+
+    private func positionForecastPanel(_ panel: NSPanel, below anchor: NSPanel) {
+        guard let screen = anchor.screen ?? NSScreen.main else { return }
+        let visibleFrame = screen.visibleFrame
+        let size = panel.frame.size
+        let x = min(max(anchor.frame.midX - 78, visibleFrame.minX + 8), visibleFrame.maxX - size.width - 8)
+        let y = max(visibleFrame.minY + 8, anchor.frame.minY - size.height - 8)
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     private func formatDate(_ date: Date?) -> String {

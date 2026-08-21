@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Usage Menu Bar Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --canvas: #09191f;
+        --ink: #f3f7f5;
+        --muted: #a7b8b7;
+        --quiet: #6c7d7d;
+        --line: rgba(222, 241, 237, 0.12);
+        --surface: rgba(17, 35, 39, 0.93);
+        --surface-soft: rgba(184, 221, 211, 0.075);
+        --accent: #78d8b8;
+        --accent-soft: rgba(120, 216, 184, 0.18);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        overflow-x: hidden;
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+        background: var(--canvas);
+      }
+
+      .page {
+        min-height: 100vh;
+        padding: clamp(24px, 4vw, 58px);
+        background:
+          radial-gradient(1100px 520px at 70% -15%, rgba(21, 183, 134, 0.3), transparent 65%),
+          radial-gradient(700px 620px at -4% 95%, rgba(12, 105, 134, 0.28), transparent 68%),
+          #07171d;
+      }
+
+      .intro {
+        width: min(930px, 100%);
+        margin: 0 auto 28px;
+      }
+
+      .intro p {
+        margin: 0;
+        color: rgba(241, 249, 247, 0.7);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .intro h1 {
+        margin: 8px 0 0;
+        font-size: clamp(24px, 4vw, 34px);
+        font-weight: 650;
+        letter-spacing: -0.055em;
+      }
+
+      .workspace {
+        width: min(1180px, 100%);
+        min-height: 650px;
+        margin: 0 auto;
+        overflow: hidden;
+        border: 1px solid rgba(219, 244, 238, 0.16);
+        border-radius: 24px;
+        background:
+          linear-gradient(111deg, rgba(4, 24, 31, 0.38) 15%, transparent 44%),
+          radial-gradient(850px 460px at 102% 4%, rgba(0, 217, 137, 0.76), transparent 66%),
+          radial-gradient(780px 560px at 44% 104%, rgba(19, 117, 172, 0.56), transparent 72%),
+          #06262c;
+        box-shadow: 0 36px 90px rgba(0, 4, 5, 0.38);
+      }
+
+      .menu-bar {
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 44px;
+        padding: 0 18px;
+        border-bottom: 1px solid rgba(230, 252, 246, 0.12);
+        background: rgba(2, 22, 29, 0.84);
+        backdrop-filter: blur(22px) saturate(1.25);
+      }
+
+      .app-menu {
+        display: flex;
+        gap: 22px;
+        align-items: center;
+        color: rgba(244, 251, 249, 0.92);
+        font-size: 13px;
+        font-weight: 540;
+      }
+
+      .app-menu strong { font-weight: 650; }
+
+      .notch {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: 214px;
+        height: 18px;
+        border-radius: 0 0 14px 14px;
+        background: #010607;
+        transform: translateX(-50%);
+      }
+
+      .hover-zone {
+        position: absolute;
+        top: 4px;
+        left: calc(50% - 258px);
+        z-index: 2;
+        width: 190px;
+      }
+
+      .usage-anchor {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-width: 160px;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid rgba(241, 253, 249, 0.22);
+        border-radius: 9px;
+        color: #f4faf8;
+        background: rgba(8, 31, 35, 0.52);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        font: 590 12px -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif;
+        letter-spacing: 0.01em;
+        cursor: default;
+      }
+
+      .usage-anchor:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      .usage-anchor .time {
+        color: rgba(244, 250, 248, 0.72);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 11px;
+      }
+
+      .usage-anchor .divider {
+        margin: 0 8px;
+        color: rgba(244, 250, 248, 0.5);
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .usage-anchor .emoji {
+        margin-right: 5px;
+        font-size: 12px;
+      }
+
+      .popover {
+        position: absolute;
+        top: 42px;
+        left: -18px;
+        width: 360px;
+        padding: 18px 18px 16px;
+        border: 1px solid rgba(229, 249, 244, 0.18);
+        border-radius: 15px;
+        background: var(--surface);
+        box-shadow: 0 20px 54px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(28px) saturate(1.35);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-5px) scale(0.985);
+        transform-origin: 22% top;
+        transition: opacity 160ms ease, transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .hover-zone.is-open .popover,
+      .hover-zone:hover .popover,
+      .hover-zone:focus-within .popover {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+      }
+
+      .forecast {
+        padding: 2px 2px 18px;
+      }
+
+      .forecast-state {
+        margin: 0 0 9px;
+        color: var(--accent);
+        font-size: 14px;
+        font-weight: 640;
+        letter-spacing: -0.02em;
+      }
+
+      .forecast-result {
+        margin: 0;
+        color: var(--ink);
+        font-size: 21px;
+        font-weight: 650;
+        letter-spacing: -0.045em;
+      }
+
+      .forecast-detail {
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .consumption {
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+      }
+
+      .section-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+
+      .section-head h2 {
+        margin: 0;
+        color: rgba(247, 252, 250, 0.94);
+        font-size: 14px;
+        font-weight: 630;
+        letter-spacing: -0.02em;
+      }
+
+      .section-head span {
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .period {
+        margin: 4px 0 14px;
+        color: var(--quiet);
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+      }
+
+      .chart {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 5px;
+      }
+
+      .day {
+        min-width: 0;
+        text-align: center;
+      }
+
+      .day-label {
+        display: block;
+        min-height: 29px;
+        color: var(--quiet);
+        font-size: 10px;
+        line-height: 1.15;
+      }
+
+      .day-label strong {
+        display: block;
+        color: #d9efea;
+        font-weight: 650;
+      }
+
+      .day-value {
+        display: block;
+        min-height: 17px;
+        margin-top: 3px;
+        color: #dce9e6;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 10px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .bar-zone {
+        display: flex;
+        align-items: end;
+        justify-content: center;
+        height: 68px;
+        margin-top: 5px;
+      }
+
+      .bar {
+        width: 16px;
+        height: var(--height, 0px);
+        border-radius: 5px 5px 3px 3px;
+        background: #88cdb7;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      }
+
+      .day.today .day-label,
+      .day.today .day-value { color: #edfff9; }
+
+      .day.today .bar {
+        border: 1px solid rgba(214, 255, 241, 0.74);
+        background: repeating-linear-gradient(135deg, #9ce3cc 0 3px, #426c61 3px 5px);
+      }
+
+      .future .day-label { color: rgba(170, 194, 188, 0.42); }
+
+      .future .bar-zone::after {
+        width: 14px;
+        height: 1px;
+        border-radius: 999px;
+        background: rgba(193, 221, 214, 0.24);
+        content: "";
+      }
+
+      .workspace-caption {
+        position: absolute;
+        right: 26px;
+        bottom: 26px;
+        color: rgba(228, 248, 243, 0.5);
+        font-size: 12px;
+      }
+
+      @media (max-width: 760px) {
+        .page { padding: 16px; }
+        .workspace { min-height: 560px; border-radius: 18px; }
+        .app-menu { gap: 12px; font-size: 11px; }
+        .app-menu span:nth-child(n + 4) { display: none; }
+        .notch { width: 130px; height: 15px; }
+        .hover-zone { left: 12px; width: min(calc(100vw - 56px), 360px); }
+        .usage-anchor { min-width: 160px; }
+        .popover { left: 0; width: min(calc(100vw - 58px), 360px); }
+        .workspace-caption { right: 18px; bottom: 18px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .popover { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="intro">
+        <p>Codex Usage Menu Bar</p>
+        <h1>菜单栏保持安静，悬浮时给出完整判断。</h1>
+      </header>
+
+      <section class="workspace" aria-label="Codex usage menu bar prototype">
+        <div class="menu-bar">
+          <div class="app-menu" aria-hidden="true">
+            <strong>●</strong><strong>ChatGPT</strong><span>文件</span><span>编辑</span><span>窗口</span>
+          </div>
+          <div class="notch" aria-hidden="true"></div>
+
+          <div class="hover-zone is-open">
+            <button class="usage-anchor" type="button" aria-expanded="true" aria-controls="usage-popover">
+              <span><span class="emoji">💰</span>92%</span>
+              <span class="divider">｜</span>
+              <span class="time"><span class="emoji">📅</span>8/27</span>
+            </button>
+
+            <section class="popover" id="usage-popover" aria-label="用量预测详情">
+              <div class="forecast">
+                <p class="forecast-state">配速偏慢</p>
+                <p class="forecast-result">预计重置时剩余 51%</p>
+                <p class="forecast-detail">额度重置：8 月 27 日 11:41</p>
+              </div>
+
+              <div class="consumption">
+                <div class="section-head">
+                  <h2>本周期消耗</h2>
+                  <span>日均 7%</span>
+                </div>
+                <p class="period">8/20 11:41  →  8/27 11:41</p>
+
+                <div class="chart" aria-label="本周期每日消耗柱状图">
+                  <div class="day">
+                    <span class="day-label"><strong>20</strong>周三</span>
+                    <span class="day-value">6%</span>
+                    <div class="bar-zone"><span class="bar" style="--height: 28px"></span></div>
+                  </div>
+                  <div class="day today">
+                    <span class="day-label"><strong>21</strong>今天</span>
+                    <span class="day-value">2%</span>
+                    <div class="bar-zone"><span class="bar" style="--height: 13px"></span></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>22</strong>周五</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>23</strong>周六</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>24</strong>周日</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>25</strong>周一</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>26</strong>周二</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                  <div class="day future">
+                    <span class="day-label"><strong>27</strong>周三</span>
+                    <span class="day-value"></span>
+                    <div class="bar-zone"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <span class="workspace-caption">悬浮查看本周期配速与消耗</span>
+      </section>
+    </main>
+
+    <script>
+      const zone = document.querySelector('.hover-zone');
+      const anchor = document.querySelector('.usage-anchor');
+      const panel = document.querySelector('.popover');
+
+      anchor.addEventListener('click', () => {
+        const open = zone.classList.toggle('is-open');
+        anchor.setAttribute('aria-expanded', String(open));
+      });
+
+      zone.addEventListener('mouseleave', () => {
+        zone.classList.remove('is-open');
+        anchor.setAttribute('aria-expanded', 'false');
+      });
+
+      zone.addEventListener('mouseenter', () => {
+        zone.classList.add('is-open');
+        anchor.setAttribute('aria-expanded', 'true');
+      });
+
+      panel.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          zone.classList.remove('is-open');
+          anchor.setAttribute('aria-expanded', 'false');
+          anchor.focus();
+        }
+      });
+    </script>
+  </body>
+</html>

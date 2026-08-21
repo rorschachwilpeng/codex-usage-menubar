@@ -20,6 +20,8 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
     let secondaryRemaining: Int?
     let primaryResetsAt: Date?
     let secondaryResetsAt: Date?
+    let primaryWindowDurationMins: Int?
+    let secondaryWindowDurationMins: Int?
     let updatedAt: Date
 
     init(response: RateLimitsResponse, updatedAt: Date) {
@@ -27,13 +29,18 @@ struct UsageSnapshot: Codable, Equatable, Sendable {
         secondaryRemaining = Self.remaining(from: response.rateLimits.secondary)
         primaryResetsAt = Self.resetDate(from: response.rateLimits.primary)
         secondaryResetsAt = Self.resetDate(from: response.rateLimits.secondary)
+        primaryWindowDurationMins = response.rateLimits.primary?.windowDurationMins
+        secondaryWindowDurationMins = response.rateLimits.secondary?.windowDurationMins
         self.updatedAt = updatedAt
     }
 
+    // Newer Codex versions expose the weekly window as `primary`; older versions used `secondary`.
+    var weeklyRemaining: Int? { secondaryRemaining ?? primaryRemaining }
+    var weeklyResetsAt: Date? { secondaryResetsAt ?? primaryResetsAt }
+    var weeklyWindowDurationMins: Int? { secondaryWindowDurationMins ?? primaryWindowDurationMins ?? 10_080 }
+
     var menuBarTitle: String {
-        let primary = primaryRemaining.map(String.init) ?? "--"
-        let secondary = secondaryRemaining.map(String.init) ?? "--"
-        return "5h: \(primary)% | week: \(secondary)%"
+        WeeklyPillPresentation(snapshot: self).menuBarText
     }
 
     private static func remaining(from window: RateLimitWindow?) -> Int? {
