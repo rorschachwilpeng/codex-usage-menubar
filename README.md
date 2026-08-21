@@ -1,74 +1,83 @@
 # Codex Usage Menu Bar
 
-A lightweight native macOS menu bar app that shows your remaining Codex usage and reset times without opening the Codex window.
+Stop opening Codex just to ask: "Will my quota last until reset?"
+
+Codex Usage Menu Bar is a lightweight native macOS app that keeps the answer in your menu bar. It shows what remains now, then forecasts whether your current pace will reach the next reset.
 
 ![Codex Usage Menu Bar in the macOS menu bar](docs/usage-menubar-context.png)
 
-*Always visible beside the notch while you work.*
+<img src="docs/usage-menubar-closeup.png" alt="Close-up of the weekly quota forecast popover" width="406">
 
-<img src="docs/usage-menubar-closeup.png" alt="Close-up of Codex remaining usage and reset times" width="406">
+## What it shows
 
-*Remaining short-window usage and reset time on the left; weekly usage and reset date on the right.*
+- `💰 88% ｜ 📅 8/27`: remaining quota and next reset date, always visible in the menu bar.
+- Hover for a forecast: expected quota at reset, or the estimated time it runs out.
+- A daily usage review for the current reset cycle. Today is marked separately; future days are never presented as zero usage.
+- Refreshes automatically every 30 seconds and works while the Codex window is closed.
+
+Daily bars begin with the first local observation. The app never invents earlier daily usage that it has not observed.
+
+## Install with an Agent
+
+Paste the following into a Codex or ChatGPT agent that has terminal access:
 
 ```text
-⏰17% 14:32 ║ 📅87% 7/18
+Install Codex Usage Menu Bar from https://github.com/rorschachwilpeng/codex-usage-menubar on this Mac.
+
+Run the official installer below. Do not request, print, copy, or store any credentials. When finished, confirm that Codex Usage.app is running and that the menu bar shows the current remaining quota and reset date.
+
+curl -fsSL https://raw.githubusercontent.com/rorschachwilpeng/codex-usage-menubar/main/scripts/install-from-github.sh | bash
 ```
 
-- `⏰` shows the rolling short-window limit and its reset time.
-- `📅` shows the weekly limit and its reset date.
-- Refreshes automatically every 30 seconds.
-- Keeps working when the Codex window is closed.
-- Uses the local Codex app-server and your existing login session.
-- Never reads, copies, or stores your authentication token.
+The script downloads the source into your user Application Support folder, builds the app locally, installs it to `~/Applications/Codex Usage.app`, and starts it at login. It never asks for your Codex password.
 
-## Requirements
+### One-command install
 
-- macOS 13 Ventura or later.
-- Codex for macOS or ChatGPT for macOS with Codex installed and signed in.
-- Xcode Command Line Tools when installing from source: `xcode-select --install`.
-
-Both Apple Silicon and Intel Macs are supported when built from source. Release ZIPs are Universal binaries.
-
-## Install
-
-### Build from source
+If you prefer Terminal, run:
 
 ```bash
-git clone https://github.com/rorschachwilpeng/codex-usage-menubar.git
-cd codex-usage-menubar
-./scripts/install.sh
+curl -fsSL https://raw.githubusercontent.com/rorschachwilpeng/codex-usage-menubar/main/scripts/install-from-github.sh | bash
 ```
 
-The installer builds the app for your Mac, copies it to `~/Applications/Codex Usage.app`, and adds a user LaunchAgent so it starts at login.
+The first run may require you to install Xcode Command Line Tools:
+
+```bash
+xcode-select --install
+```
+
+Then run the installer again.
 
 ### Download a release
 
 Download `Codex-Usage-v*.app.zip` from [Releases](https://github.com/rorschachwilpeng/codex-usage-menubar/releases), unzip it, and move the app to `~/Applications`.
 
-Release builds are ad-hoc signed, not Apple-notarized. If macOS blocks the first launch, open **System Settings → Privacy & Security** and choose **Open Anyway**. Building from source avoids downloading an untrusted executable.
+Release builds are ad-hoc signed, not Apple-notarized. If macOS blocks the first launch, open **System Settings > Privacy & Security** and choose **Open Anyway**.
 
-## Usage
+## Requirements
 
-The app finds Codex in these locations, in order:
+- macOS 13 Ventura or later.
+- Codex for macOS, or ChatGPT for macOS with Codex installed and signed in.
+- Internet access for Codex to refresh its own usage information.
 
-1. The executable specified by `CODEX_EXECUTABLE`.
-2. ChatGPT or Codex in `/Applications`.
-3. ChatGPT or Codex in `~/Applications`.
-4. A `codex` executable available on `PATH`.
-
-The display follows your Mac's current time zone. On a MacBook with a notch, the pill stays inside the left safe area. On non-notch displays, macOS manages it as a standard status item.
+Both Apple Silicon and Intel Macs are supported. Release ZIPs are Universal binaries.
 
 ## Privacy
 
-The app launches Codex's bundled local app-server and calls the read-only `account/rateLimits/read` method. It stores only the last successful percentages, reset timestamps, and update timestamp in:
+The app launches Codex's bundled local app-server and calls the read-only `account/rateLimits/read` method. It does not read, copy, or store authentication tokens.
+
+It stores only local quota observations and reset timestamps in:
 
 ```text
-~/Library/Application Support/CodexUsageMenuBar/last-usage.json
+~/Library/Application Support/CodexUsageMenuBar/
 ```
 
 See [PRIVACY.md](PRIVACY.md) for the complete data statement.
 
 ## Troubleshooting
+
+### No usage data appears
+
+Open ChatGPT/Codex once and confirm that you are signed in. Then choose **Refresh Now** from the menu bar item or restart the app.
 
 ### "Codex executable not found"
 
@@ -77,10 +86,6 @@ Install ChatGPT/Codex in `/Applications`, or launch with an explicit path:
 ```bash
 CODEX_EXECUTABLE="/custom/path/to/codex" "$HOME/Applications/Codex Usage.app/Contents/MacOS/CodexUsageMenuBar"
 ```
-
-### No usage data appears
-
-Open ChatGPT/Codex once and confirm that you are signed in. Then choose **Refresh Now** from the menu bar item or restart the app.
 
 ### The app stopped after a Codex update
 

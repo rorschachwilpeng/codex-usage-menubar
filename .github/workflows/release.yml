@@ -15,7 +15,7 @@ jobs:
       - name: Run tests
         run: ./scripts/test.sh
       - name: Build Universal app
-        run: CODEX_BUILD_UNIVERSAL=1 ./scripts/build-app.sh
+        run: CODEX_BUILD_UNIVERSAL=1 CODEX_USAGE_VERSION="${GITHUB_REF_NAME#v}" ./scripts/build-app.sh
       - name: Package app
         run: |
           VERSION="${GITHUB_REF_NAME}"
